@@ -12,7 +12,7 @@ app.use(cors());
 // Parsear el cuerpo de las peticiones
 app.use(express.json());
 
-// Crear conexión a la base de datos
+// Crear conexión a la base de datos general
 const db = mysql.createConnection({
   host: 'localhost', // Reemplazar con tu host de la base de datos
   user: 'root', // Reemplazar con tu usuario de la base de datos
@@ -22,6 +22,20 @@ const db = mysql.createConnection({
 
 // Conectar a la base de datos
 db.connect(err => {
+  if (err) throw err;
+  console.log('Conexión a la base de datos establecida.');
+});
+
+
+// Crear conexión a la base de datos administradores
+const dbAdmin = mysql.createConnection({
+  host: 'localhost',
+  user: 'root',
+  password: '', // Asegúrate de que esté tu contraseña correcta aquí
+  database: 'dashboardAdministrador'
+});
+
+dbAdmin.connect(err => {
   if (err) throw err;
   console.log('Conexión a la base de datos establecida.');
 });
@@ -171,27 +185,32 @@ app.get('/usuario/:user_id/bancos', (req, res) => {
 
 
 
-// Endpoint para login
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    // Buscar al usuario en la base de datos
-    const userQuery = 'SELECT * FROM users WHERE username = ?';
-    const user = await db.query(userQuery, [username]);
+// Endpoint simplificado para login
+app.post('/login', (req, res) => {
+  const { correo, password } = req.body;
 
-    // Verificar si el usuario existe y si la contraseña coincide
-    if (user.length > 0 && await bcrypt.compare(password, user[0].password)) {
-      // Generar el token JWT
-      const token = jwt.sign({ id: user[0].id }, 'tu_secreto', { expiresIn: '1h' }); // Cambia 'tu_secreto' por una clave secreta segura
+  const userQuery = 'SELECT * FROM administradores WHERE correo = ?';
 
-      // Enviar el token como respuesta
-      res.json({ token });
+
+  dbAdmin.query(userQuery, [correo], (err, users) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send('Error en el servidor');
+      return;
+    }
+
+    if (users.length > 0) {
+      const user = users[0];
+      // En un entorno de producción, debes usar bcrypt para verificar la contraseña
+      if (password === user.password) {
+        res.send('Login exitoso'); // Sólo para fines de prueba
+      } else {
+        res.status(401).send('Credenciales incorrectas');
+      }
     } else {
       res.status(401).send('Credenciales incorrectas');
     }
-  } catch (error) {
-    res.status(500).send('Error en el servidor');
-  }
+  });
 });
 
 
