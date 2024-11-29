@@ -1,7 +1,5 @@
-// server.js
-
 const express = require('express');
-const mysql = require('mysql2');
+const mysql = require('mysql2/promise'); // Usar mysql2 con promesas
 const cors = require('cors');
 
 const app = express();
@@ -12,47 +10,40 @@ app.use(cors());
 // Parsear el cuerpo de las peticiones
 app.use(express.json());
 
-// Crear conexión a la base de datos general
-const db = mysql.createConnection({
-  host: 'localhost', // Reemplazar con tu host de la base de datos
-  user: 'root', // Reemplazar con tu usuario de la base de datos
-  password: '', // Reemplazar con tu contraseña
-  database: 'mi_base_de_datos' // Reemplazar con el nombre de tu base de datos
+// Crear un pool de conexiones para la base de datos general
+const dbPool = mysql.createPool({
+  host: '193.203.175.32', // Reemplazar con tu host de la base de datos
+  user: 'u491711087_johan', // Reemplazar con tu usuario de la base de datos
+  password: '5FgpE3Be$', // Reemplazar con tu contraseña
+  database: 'u491711087_mibasededatos', // Reemplazar con el nombre de tu base de datos
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
 
-// Conectar a la base de datos
-db.connect(err => {
-  if (err) throw err;
-  console.log('Conexión a la base de datos establecida.');
+// Crear un pool de conexiones para la base de datos administradores
+const dbAdminPool = mysql.createPool({
+  host: 'srv1180.hstgr.io',
+  user: 'u491711087_manager7',
+  password: 'g80kvOgVL3S', // Asegúrate de que esté tu contraseña correcta aquí
+  database: 'u491711087_managers',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
-
-
-// Crear conexión a la base de datos administradores
-const dbAdmin = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: '', // Asegúrate de que esté tu contraseña correcta aquí
-  database: 'dashboardAdministrador'
-});
-
-dbAdmin.connect(err => {
-  if (err) throw err;
-  console.log('Conexión a la base de datos establecida.');
-});
-
-
 
 // Ruta para obtener usuarios
-app.get('/usuarios', (req, res) => {
-  db.query('SELECT * FROM usuarios', (err, results) => {
-    if (err) throw err;
+app.get('/usuarios', async (req, res) => {
+  try {
+    const [results] = await dbPool.query('SELECT * FROM usuarios');
     res.json(results);
-  });
+  } catch (err) {
+    console.error('Error al obtener usuarios:', err);
+    res.status(500).json({ message: 'Error al obtener usuarios' });
+  }
 });
 
-
-
-app.get('/retiros', (req, res) => {
+app.get('/retiros', async (req, res) => {
   const query = `
     SELECT 
       retiros.user_id,
@@ -70,22 +61,18 @@ app.get('/retiros', (req, res) => {
     ORDER BY retiros.fecha_hora DESC
   `;
 
-  db.query(query, (err, results) => {
-    if (err) {
-      // Manejo de errores
-      console.error(err);
-      return res.status(500).json({ message: 'Error al consultar los retiros' });
-    }
-    // Envío de resultados
+  try {
+    const [results] = await dbPool.query(query);
     res.json(results);
-  });
+  } catch (err) {
+    console.error('Error al consultar los retiros:', err);
+    res.status(500).json({ message: 'Error al consultar los retiros' });
+  }
 });
 
-
-// Ruta para obtener toda la información de un usuario específico -HISTORIAL MUESTRA TODOS
-app.get('/usuario/:user_id', (req, res) => {
+app.get('/usuario/:user_id', async (req, res) => {
   const userId = req.params.user_id;
-  
+
   const query = `
     SELECT 
       usuarios.*,
@@ -106,23 +93,17 @@ app.get('/usuario/:user_id', (req, res) => {
     ORDER BY retiros.fecha_hora DESC
   `;
 
-  db.query(query, [userId], (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ message: 'Error al consultar la información del usuario' });
-    }
+  try {
+    const [results] = await dbPool.query(query, [userId]);
     res.json(results);
-  });
+  } catch (err) {
+    console.error('Error al consultar la información del usuario:', err);
+    res.status(500).json({ message: 'Error al consultar la información del usuario' });
+  }
 });
 
-
-
-// Dentro de server.js o donde manejes tus rutas
-
-app.put('/actualizarRetiro', (req, res) => {
+app.put('/actualizarRetiro', async (req, res) => {
   const { identificador_transaccion, estado } = req.body;
-
-  // Asegúrate de validar el nuevo estado y el identificador del retiro aquí
 
   const query = `
     UPDATE retiros 
@@ -130,25 +111,18 @@ app.put('/actualizarRetiro', (req, res) => {
     WHERE identificador_transaccion = ?
   `;
 
-  db.query(query, [estado, identificador_transaccion], (err, result) => {
-    if (err) {
-      console.error('Error al actualizar el retiro', err);
-      return res.status(500).json({ message: 'Error al actualizar el retiro' });
-    }
+  try {
+    await dbPool.query(query, [estado, identificador_transaccion]);
     res.json({ message: 'Retiro actualizado con éxito' });
-  });
+  } catch (err) {
+    console.error('Error al actualizar el retiro:', err);
+    res.status(500).json({ message: 'Error al actualizar el retiro' });
+  }
 });
 
-
-
-
-// Dentro de tu servidor de Node.js
-
-app.put('/usuario/:user_id', (req, res) => {
+app.put('/usuario/:user_id', async (req, res) => {
   const { user_id } = req.params;
   const { mi_billetera1 } = req.body;
-
-  // Aquí deberías validar que el usuario que hace la solicitud tiene permisos para hacerlo
 
   const query = `
     UPDATE usuarios 
@@ -156,52 +130,39 @@ app.put('/usuario/:user_id', (req, res) => {
     WHERE user_id = ?
   `;
 
-  // Asumiendo que tienes una función db.query configurada para interactuar con tu base de datos
-  db.query(query, [mi_billetera1, user_id], (err, result) => {
-    if (err) {
-      console.error('Error al actualizar el saldo del usuario', err);
-      return res.status(500).json({ message: 'Error al actualizar el saldo del usuario' });
-    }
+  try {
+    await dbPool.query(query, [mi_billetera1, user_id]);
     res.json({ message: 'Saldo actualizado con éxito' });
-  });
+  } catch (err) {
+    console.error('Error al actualizar el saldo del usuario:', err);
+    res.status(500).json({ message: 'Error al actualizar el saldo del usuario' });
+  }
 });
 
-
-// En tu archivo de rutas de Node.js (puede ser server.js o algún otro archivo dependiendo de cómo esté estructurado tu proyecto)
-
-app.get('/usuario/:user_id/bancos', (req, res) => {
+app.get('/usuario/:user_id/bancos', async (req, res) => {
   const { user_id } = req.params;
 
   const query = 'SELECT * FROM bancos_usuarios WHERE user_id = ?';
 
-  db.query(query, [user_id], (err, results) => {
-    if (err) {
-      console.error('Error al obtener los bancos del usuario', err);
-      return res.status(500).json({ message: 'Error al obtener los bancos del usuario' });
-    }
+  try {
+    const [results] = await dbPool.query(query, [user_id]);
     res.json(results);
-  });
+  } catch (err) {
+    console.error('Error al obtener los bancos del usuario:', err);
+    res.status(500).json({ message: 'Error al obtener los bancos del usuario' });
+  }
 });
 
-
-
-// Endpoint simplificado para login
-app.post('/login', (req, res) => {
+app.post('/login', async (req, res) => {
   const { correo, password } = req.body;
 
   const userQuery = 'SELECT * FROM administradores WHERE correo = ?';
 
-
-  dbAdmin.query(userQuery, [correo], (err, users) => {
-    if (err) {
-      console.error(err);
-      res.status(500).send('Error en el servidor');
-      return;
-    }
+  try {
+    const [users] = await dbAdminPool.query(userQuery, [correo]);
 
     if (users.length > 0) {
       const user = users[0];
-      // En un entorno de producción, debes usar bcrypt para verificar la contraseña
       if (password === user.password) {
         res.send('Login exitoso'); // Sólo para fines de prueba
       } else {
@@ -210,9 +171,11 @@ app.post('/login', (req, res) => {
     } else {
       res.status(401).send('Credenciales incorrectas');
     }
-  });
+  } catch (err) {
+    console.error('Error en el login:', err);
+    res.status(500).send('Error en el servidor');
+  }
 });
-
 
 // Iniciar el servidor
 const PORT = process.env.PORT || 3000;
